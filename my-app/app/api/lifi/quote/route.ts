@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
       fromAmount: route.fromAmount,
       toAmount: route.toAmount,
       steps: route.steps?.length ?? 0,
-      gasCosts: route.gasCosts,
     };
     return NextResponse.json({ route: summary, fullRoute: route });
   } catch (error) {
