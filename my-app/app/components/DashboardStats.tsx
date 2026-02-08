@@ -23,30 +23,10 @@ export default function DashboardStats({
   };
 
   const stats = [
-    {
-      label: 'Total TVL',
-      value: formatCurrency(totalTVL),
-      icon: '📊',
-      color: 'from-blue-500 to-cyan-500',
-    },
-    {
-      label: '24h Volume',
-      value: formatCurrency(totalVolume24h),
-      icon: '💹',
-      color: 'from-purple-500 to-pink-500',
-    },
-    {
-      label: 'Active Pools',
-      value: totalPools.toString(),
-      icon: '🏊',
-      color: 'from-green-500 to-emerald-500',
-    },
-    {
-      label: 'Avg APR',
-      value: `${avgAPR.toFixed(2)}%`,
-      icon: '📈',
-      color: 'from-orange-500 to-red-500',
-    },
+    { label: 'Total TVL', value: formatCurrency(totalTVL), accent: 'text-blue-400' },
+    { label: '24h Volume', value: formatCurrency(totalVolume24h), accent: 'text-purple-400' },
+    { label: 'Pools', value: totalPools.toString(), accent: 'text-emerald-400' },
+    { label: 'Avg APR', value: `${avgAPR.toFixed(1)}%`, accent: 'text-amber-400' },
   ];
 
   return (
@@ -54,15 +34,11 @@ export default function DashboardStats({
       {stats.map((stat, idx) => (
         <div
           key={stat.label}
-          className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 backdrop-blur-sm p-3.5 hover-lift animate-fade-in"
+          className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 p-4 animate-fade-in"
           style={{ animationDelay: `${idx * 0.05}s` }}
         >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-lg">{stat.icon}</span>
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${stat.color} opacity-20`} />
-          </div>
-          <div className="text-xl font-bold text-zinc-100">{stat.value}</div>
-          <div className="text-[11px] text-zinc-500 uppercase tracking-wider">{stat.label}</div>
+          <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">{stat.label}</div>
+          <div className={`text-xl font-bold ${stat.accent}`}>{stat.value}</div>
         </div>
       ))}
     </div>

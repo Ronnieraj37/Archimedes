@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { formatUnits } from 'viem';
-import { useAccount, useReadContract } from 'wagmi';
+import { normalize } from 'viem/ens';
+import { useAccount, useReadContract, useEnsAddress } from 'wagmi';
 import { erc20Abi } from '@/lib/abis/erc20';
 import { Button, Input } from './ui';
 import { TOKENS_BASE_SEPOLIA, getTokenBySymbol, getPriceInUsdt, type TokenInfo } from '@/lib/constants/tokens';
@@ -114,8 +115,26 @@ export default function SwapInterface({ onSwap, initialSwap, onInitialSwapApplie
   const [loading, setLoading] = useState(false);
   const [txHashes, setTxHashes] = useState<string[]>([]);
   const [swapError, setSwapError] = useState<string | null>(null);
+  const [recipientInput, setRecipientInput] = useState('');
 
-  const { executeSingleSwap, executeBasketSwaps, isCorrectChain, isConnected } = useSwap();
+  const looksLikeEns = recipientInput.trim().length > 0 && /\.eth$/i.test(recipientInput.trim());
+  const { data: resolvedEnsAddress } = useEnsAddress({
+    name: looksLikeEns ? normalize(recipientInput.trim()) : undefined,
+    chainId: 1,
+    query: { enabled: looksLikeEns },
+  });
+
+  const effectiveReceiver = useMemo((): `0x${string}` | undefined => {
+    const raw = recipientInput.trim();
+    if (!raw) return undefined;
+    if (resolvedEnsAddress) return resolvedEnsAddress;
+    if (/^0x[a-fA-F0-9]{40}$/.test(raw)) return raw as `0x${string}`;
+    return undefined;
+  }, [recipientInput, resolvedEnsAddress]);
+
+  const { executeSingleSwap, executeBasketSwaps, isCorrectChain, isConnected } = useSwap(
+    effectiveReceiver ? { receiverOverride: effectiveReceiver } : undefined
+  );
 
   // Update estimated output when input amounts or tokens change
   useEffect(() => {
@@ -276,22 +295,29 @@ export default function SwapInterface({ onSwap, initialSwap, onInitialSwapApplie
   return (
     <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/40 backdrop-blur-sm p-4 sm:p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-zinc-100">Multi-Token Swap</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Single Token</span>
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsMultiToken(!isMultiToken)}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              isMultiToken ? 'bg-blue-600' : 'bg-zinc-700'
+            type="button"
+            onClick={() => setIsMultiToken(false)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              !isMultiToken
+                ? 'bg-blue-600/20 text-blue-300 border border-blue-500/25'
+                : 'text-zinc-400 hover:text-zinc-200 border border-zinc-800/50'
             }`}
           >
-            <div
-              className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                isMultiToken ? 'translate-x-6' : 'translate-x-0'
-              }`}
-            />
+            Single
           </button>
-          <span className="text-xs text-zinc-400">Multi-Token Basket</span>
+          <button
+            type="button"
+            onClick={() => setIsMultiToken(true)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              isMultiToken
+                ? 'bg-blue-600/20 text-blue-300 border border-blue-500/25'
+                : 'text-zinc-400 hover:text-zinc-200 border border-zinc-800/50'
+            }`}
+          >
+            Basket
+          </button>
         </div>
       </div>
 
@@ -396,6 +422,26 @@ export default function SwapInterface({ onSwap, initialSwap, onInitialSwapApplie
             readOnly
           />
         </div>
+      </div>
+
+      {/* Recipient (optional): address or ENS */}
+      <div className="mb-3">
+        <label className="text-xs font-medium text-zinc-400 mb-1.5 block">Send to (optional — address or ENS)</label>
+        <Input
+          type="text"
+          value={recipientInput}
+          onChange={(e) => setRecipientInput(e.target.value)}
+          placeholder="e.g. vitalik.eth or 0x..."
+          className="w-full rounded-lg border border-zinc-800/60 bg-zinc-900/50 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500"
+        />
+        {looksLikeEns && !resolvedEnsAddress && (
+          <p className="text-xs text-amber-400 mt-1">Resolving ENS…</p>
+        )}
+        {effectiveReceiver && recipientInput.trim() && (
+          <p className="text-xs text-emerald-400 mt-1">
+            Sending to: {resolvedEnsAddress ? `${recipientInput.trim()} → ${effectiveReceiver.slice(0, 6)}…${effectiveReceiver.slice(-4)}` : `${effectiveReceiver.slice(0, 6)}…${effectiveReceiver.slice(-4)}`}
+          </p>
+        )}
       </div>
 
       {/* Swap Info */}

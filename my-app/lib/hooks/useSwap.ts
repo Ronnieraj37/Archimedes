@@ -63,8 +63,9 @@ function pathToPathKeys(path: string[]): {
   return keys;
 }
 
-export function useSwap() {
-  const { address: receiver, chain } = useAccount();
+export function useSwap(options?: { receiverOverride?: `0x${string}` }) {
+  const { address: connectedAddress, chain } = useAccount();
+  const receiver = (options?.receiverOverride ?? connectedAddress) as `0x${string}` | undefined;
   const { writeContractAsync } = useWriteContract();
 
   const isCorrectChain = chain?.id === CHAIN_ID;

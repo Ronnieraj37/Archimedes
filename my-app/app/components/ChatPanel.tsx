@@ -97,12 +97,12 @@ export default function ChatPanel({ embedded, onSwapIntent, onMintTokens }: Chat
       {!embedded && (
         <div className="border-b border-zinc-800/60 px-4 py-2.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-base shadow-sm">
-              🤖
+            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
+              A
             </div>
             <div>
-              <h3 className="text-base font-semibold text-zinc-100">Archimedes AI</h3>
-              <p className="text-xs text-zinc-400">Always here to help</p>
+              <h3 className="text-sm font-semibold text-zinc-100">Archimedes AI</h3>
+              <p className="text-[10px] text-zinc-500">Swap, pools, test tokens</p>
             </div>
           </div>
           <button
@@ -118,10 +118,10 @@ export default function ChatPanel({ embedded, onSwapIntent, onMintTokens }: Chat
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {history.length === 0 ? (
-          <div className="text-center text-zinc-500 text-sm pt-6">
-            <p className="font-medium text-zinc-300 mb-1">Ask me anything</p>
-            <p className="text-xs text-zinc-500 mb-4">
-              Pools, swaps, multi-token baskets, or strategies on Base.
+          <div className="text-center text-zinc-500 text-sm pt-8">
+            <p className="font-medium text-zinc-300 mb-1">What can I help with?</p>
+            <p className="text-xs text-zinc-500 mb-5">
+              Swaps, basket swaps, pool discovery, or test tokens.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {['Get test tokens', 'Swap 100 USDT to WETH', 'Swap 100 USDT and 0.02 WBTC to WETH', 'Best pools by APR'].map(
