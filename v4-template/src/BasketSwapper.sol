@@ -2,20 +2,24 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {IUniswapV4Router04} from "hookmate/interfaces/router/IUniswapV4Router04.sol";
 
 /// @title BasketSwapper
 /// @notice Wraps N single-pool swaps into ONE on-chain transaction.
 ///         User approves this contract for each input token (max approval, one-time),
 ///         then calls basketSwap().  The contract pulls every input token, approves the
-///         Hookmate V4 Swap Router, and calls swapExactTokensForTokens for each sub-swap.
+///         router once per unique token (max), and calls swapExactTokensForTokens for each sub-swap.
 ///         Output tokens are sent directly to the receiver by the router.
 ///
-///         Because all sub-swaps run inside one transaction the YieldOptimizerHook's
-///         beforeSwap / afterSwap fire for each leg — same block, same tx.
+///         Optimizations: (1) Approve router type(uint256).max once per unique token instead of
+///         per-leg. (2) Direct interface call to router instead of low-level call + abi.encode.
 contract BasketSwapper {
-    address public immutable router;
+    IUniswapV4Router04 public immutable router;
 
-    struct PoolKey {
+    struct PoolKeyInput {
         address currency0;
         address currency1;
         uint24 fee;
@@ -28,11 +32,11 @@ contract BasketSwapper {
         uint256 amountIn;     // raw amount (with decimals)
         uint256 amountOutMin; // minimum output (slippage protection)
         bool zeroForOne;      // swap direction in the pool
-        PoolKey poolKey;      // which pool to route through
+        PoolKeyInput poolKey; // which pool to route through
     }
 
     constructor(address _router) {
-        router = _router;
+        router = IUniswapV4Router04(payable(_router));
     }
 
     /// @notice Execute N input-token → output-token swaps in a single tx.
@@ -47,34 +51,32 @@ contract BasketSwapper {
         for (uint256 i = 0; i < inputs.length; i++) {
             IERC20 token = IERC20(inputs[i].token);
 
-            // 1. Pull input token from caller
+            // 1. Pull input token from caller (required: router pulls from msg.sender = this)
             token.transferFrom(msg.sender, address(this), inputs[i].amountIn);
 
-            // 2. Approve router to spend it
-            token.approve(router, inputs[i].amountIn);
-
-            // 3. Execute the swap — output goes directly to receiver
-            //    The Hookmate router uses direct transferFrom(msg.sender=this, poolManager, amountIn).
-            //    Because we approved the router in step 2, this works.
-            (bool ok, bytes memory result) = router.call(
-                abi.encodeWithSignature(
-                    "swapExactTokensForTokens(uint256,uint256,bool,(address,address,uint24,int24,address),bytes,address,uint256)",
-                    inputs[i].amountIn,
-                    inputs[i].amountOutMin,
-                    inputs[i].zeroForOne,
-                    inputs[i].poolKey,
-                    "",
-                    receiver,
-                    deadline
-                )
-            );
-
-            if (!ok) {
-                // Bubble up the revert reason from the router
-                assembly {
-                    revert(add(result, 32), mload(result))
-                }
+            // 2. Approve router only when needed (once per unique token; max so no repeat)
+            if (token.allowance(address(this), address(router)) < inputs[i].amountIn) {
+                token.approve(address(router), type(uint256).max);
             }
+
+            // 3. Build v4 PoolKey and execute swap — output goes directly to receiver
+            PoolKey memory pk = PoolKey({
+                currency0: Currency.wrap(inputs[i].poolKey.currency0),
+                currency1: Currency.wrap(inputs[i].poolKey.currency1),
+                fee: inputs[i].poolKey.fee,
+                tickSpacing: inputs[i].poolKey.tickSpacing,
+                hooks: IHooks(inputs[i].poolKey.hooks)
+            });
+
+            router.swapExactTokensForTokens(
+                inputs[i].amountIn,
+                inputs[i].amountOutMin,
+                inputs[i].zeroForOne,
+                pk,
+                "", // hookData
+                receiver,
+                deadline
+            );
         }
     }
 }

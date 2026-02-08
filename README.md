@@ -1,35 +1,60 @@
 # Archimedes Protocol
 
-**Multi-token basket swaps on Uniswap v4 with AI-powered intent resolution.**
+**A better DeFi app — we get there by solving real problems.**
 
-Archimedes lets users swap multiple tokens into a single output token in **one on-chain transaction**, saving gas and reducing wallet confirmations. An AI chat assistant (Claude) parses natural language into executable swap intents, pool lookups, and test-token minting -- all on **Base Sepolia**.
-
-Built for [ETHGlobal HackMoney](https://ethglobal.com/).
+Archimedes is a DeFi experience that puts users first: fewer clicks, less gas, and capital that works for you. We don’t just add features — we fix the friction that makes DeFi painful. Below is how we do it.
 
 ---
 
-## The Problem
+## How we make DeFi better (problems we solve)
 
-Swapping a diversified portfolio into a single asset on existing DEXs requires **N separate transactions** -- one per input token. For a user converting USDT + WBTC + USDC into WETH, that means:
+| Problem | How we solve it |
+|--------|------------------|
+| **Multi-token swaps = N transactions** | One basket swap: many tokens → one asset in a single on-chain tx. Fewer prompts, one confirmation, one click after approvals. |
+| **DeFi UX feels like work** | AI agent (Claude) turns natural language into actions: “swap 100 USDT and 0.02 WBTC to WETH” → pre-filled swap or execution. No forms-first. |
+| **Idle liquidity doesn’t earn** | When you invest in pools, our backend uses **LI.FI** to deploy and rebalance that liquidity across chains, and **Yellow** for off-chain sessions (instant quotes, micro-moves, settle on-chain when you’re done). |
+| **Cross-chain is fragmented** | LI.FI-powered cross-chain quotes and routes in the app; backend uses the same to move liquidity where it earns. |
+| **Addresses and chains are opaque** | ENS in the UI (wallet name, “Send to” by name); clear flows for swap, invest, and cross-chain. |
+
+We build on **Uniswap v4**, **Base**, and a stack that prioritizes reliability and composability — so “better DeFi” is measurable (fewer prompts, one confirmation per basket, liquidity deployed) not just marketing.
+
+---
+
+## Technologies & Integrations
+
+| Technology | How we use it |
+|------------|----------------|
+| **Uniswap v4** | All swaps go through the v4 PoolManager; pools use our custom hook. |
+| **Hookmate** | V4 Swap Router for single and basket swap execution. |
+| **Base** | Deployed and tested on Base Sepolia (and Base mainnet for cross-chain). |
+| **ENS** | Connected wallet’s ENS name in the header; Swap “Send to” accepts an address or ENS name (resolved via wagmi `useEnsName` / `useEnsAddress`). |
+| **LI.FI** | Cross-chain quotes in the app (Cross-chain tab). Backend uses LI.FI to deploy and rebalance **idle liquidity** across chains—e.g. move user-allocated capital to higher-yield pools on other EVM chains. |
+| **Yellow** | Session-based, **off-chain** operations on allocated liquidity—instant quotes and micro-moves without gas per action; settle on-chain when the user ends the session. Used for “invest idle” and frequent rebalance flows. |
+| **AI** | Agent parses natural language into swap intents, basket params, pool lookups, and test-token minting. |
+
+---
+
+## Problem in focus: multi-token swaps
+
+Swapping a diversified portfolio into a single asset on typical DEXs means **N separate transactions** — one per input token. For a user converting USDT + WBTC + USDC into WETH, that looks like:
 
 | Traditional DEX | Archimedes |
 |----------------|------------|
 | 3 approval txs | 3 approval txs (one-time, max) |
 | 3 swap txs | **1 swap tx** |
 | 6 total wallet prompts | **4 total** (then just 1 per future basket) |
-| ~450k gas total | **~280k gas total** |
 | 3 block confirmations | **1 block confirmation** |
 
-After the first basket (approvals cached), every subsequent basket swap of the same tokens is **one click, one transaction**.
+After the first basket (approvals cached), every subsequent basket swap of the same tokens is **one click, one transaction**. That’s one of the concrete ways we make DeFi better.
 
-## How It Works
+## How it works (under the hood)
 
 ### Architecture
 
 ```
 User (wallet)
   |
-  |-- AI Chat (Claude) -----> /api/agent -----> structured intent
+  |-- AI Chat -----> /api/agent -----> structured intent
   |                                               |
   |-- Swap UI <-----------------------------------+
   |     |
@@ -42,6 +67,27 @@ User (wallet)
   |                               |
   |                               +-- all in ONE transaction
   |
+  |-- Invest in pools -----> user allocates liquidity
+  |                               |
+  |                               v
+  |                    +----------+----------+
+  |                    |                     |
+  |                    v                     v
+  |              Idle Liquidity        Yellow (off-chain)
+  |              Manager               session: instant quotes,
+  |                    |               micro-moves, no gas per action
+  |                    v                     |
+  |              LI.FI SDK                    |
+  |              cross-chain                  |
+  |              routes: deploy /             |
+  |              rebalance liquidity          |
+  |              on other EVM chains         |
+  |                    |                     |
+  |                    +----------+----------+
+  |                               |
+  |                               v
+  |                    Settle on-chain (when session ends or rebalance executes)
+  |
   +-- Get Test Tokens (mint mock ERC-20s)
 ```
 
@@ -53,7 +99,9 @@ User (wallet)
 | **YieldOptimizerHook.sol** | Uniswap v4 hook attached to every pool. Fires `beforeSwap` / `afterSwap` on every swap (including each leg of a basket swap). Enables JIT liquidity provisioning and volume tracking. |
 | **Hookmate V4 Swap Router** | The standard Uniswap v4 router that executes individual swaps via `PoolManager.swap()`. |
 | **AI Agent** (`/api/agent`) | Claude-powered NLP that parses user messages into `SWAP`, `BASKET_SWAP`, `FIND_POOLS`, or `MINT_TEST_TOKENS` intents with structured params. |
-| **Swap UI** | React frontend with multi-token input, real-time USD valuation, Max buttons, token balances, and one-click basket execution. |
+| **Swap UI** | React frontend with multi-token input, real-time USD valuation, Max buttons, token balances, optional “Send to” (address or ENS), and one-click basket execution. |
+| **LI.FI** | Cross-chain tab for quotes; backend idle-liquidity-manager uses LI.FI SDK to get routes and deploy/rebalance user-allocated liquidity across EVM chains. |
+| **Yellow** | Session API and SDK integration: off-chain state for allocated liquidity (instant quotes, micro-moves); on-chain settlement when the user ends the session. |
 
 ### Single Swap Flow
 
@@ -77,22 +125,64 @@ User (wallet)
 5. ONE transaction hash, ONE block confirmation
 ```
 
+### Idle liquidity workflow (LI.FI + Yellow)
+
+When users invest in pools, allocated liquidity is managed by the backend using LI.FI and Yellow:
+
+```
+User invests in pool
+        |
+        v
+  Allocated liquidity (idle capital)
+        |
+        +------------------+------------------+
+        |                  |                  |
+        v                  v                  v
+   LI.FI SDK          Yellow SDK         On-chain
+   get routes         create session     (Uniswap v4
+   across chains      off-chain:         pools)
+        |             instant quotes,
+        v             micro-moves             |
+   Deploy /               |                  |
+   rebalance              v                  |
+   on other EVM      End session              |
+   chains                  |                  |
+        |                  v                  |
+        |             Settle on-chain <--------+
+        |                  |
+        +------------------+
+```
+
+- **LI.FI:** Backend uses LI.FI to find cross-chain routes and move idle liquidity to higher-yield pools on other EVM chains.
+- **Yellow:** User opens a session; quotes and small rebalances happen off-chain (no gas per action); when the session ends, final state settles on-chain.
+
 ---
 
-## Gas Savings Analysis
+## Gas and UX: What We Measured
 
-Estimated gas costs on Base Sepolia (actual values from on-chain execution):
+We added a **gas benchmark test** (`v4-template/test/GasComparison.t.sol`) that compares N separate swap txs (traditional) vs 1 basket swap tx, **including the 21k base cost per transaction**. The contract is optimized: approve the router once per unique token (max), and use a direct interface call to the router instead of a low-level `call` + `abi.encode`.
 
-| Scenario | Traditional (N txs) | Archimedes (1 tx) | Savings |
-|----------|--------------------|--------------------|---------|
-| 2 tokens -> 1 | ~180k (2 x 90k) | ~150k | **~17%** |
-| 3 tokens -> 1 | ~270k (3 x 90k) | ~210k | **~22%** |
-| 5 tokens -> 1 | ~450k (5 x 90k) | ~320k | **~29%** |
+**Results (Foundry, N tokens → 1 output):**
 
-Savings come from:
-- **Shared transaction overhead**: base 21k gas paid once instead of N times
-- **Warm storage slots**: PoolManager storage is warm after the first sub-swap, reducing SLOAD costs by ~1,900 gas each
-- **Single callback context**: the unlock/callback pattern on PoolManager is entered once per sub-swap but the contract context is already warm
+| N   | Traditional (N txs, with base) | Basket (1 tx) | Basket saves   |
+|-----|---------------------------------|---------------|----------------|
+| 2   | **~368k**  | **~443k**     | basket higher  |
+| 3   | **~541k**  | **~369k**     | **~32%**       |
+| 4   | **~720k**  | **~483k**     | **~33%**       |
+
+So for **3+ tokens**, the basket is **cheaper in total gas** because we pay the 21k base cost only once instead of N times; the extra execution from the BasketSwapper (transferFrom, approve, loop) is more than offset. For 2 tokens, execution overhead still makes the basket slightly more expensive than two txs.
+
+**Contract optimizations:**
+
+- **Approve once per unique token:** `if (token.allowance(address(this), router) < amountIn) token.approve(router, type(uint256).max)` so we don’t repeat approve on every leg.
+- **Direct router call:** Use `IUniswapV4Router04(router).swapExactTokensForTokens(...)` instead of `router.call(abi.encodeWithSignature(...))` for less overhead.
+
+**Why basket swap wins for UX at any N:**
+
+- One signature, one block confirmation, one wallet prompt after approvals.
+- After one-time approvals, every basket is “one click” instead of N clicks.
+
+Run the benchmark: `cd v4-template && forge test --match-contract GasComparisonTest -vvv`.
 
 After initial approvals (max, cached forever), the user experience is:
 
@@ -124,7 +214,7 @@ HackMoney/
   README.md                 # This file
   my-app/                   # Next.js frontend + API routes
     app/
-      api/agent/route.ts    # AI agent (Claude) - intent parsing
+      api/agent/route.ts    # AI agent - intent parsing
       components/
         SwapInterface.tsx    # Swap UI (single + basket)
         ChatPanel.tsx        # AI chat sidebar
@@ -185,7 +275,7 @@ All pools use **0.30% fee**, **60 tick spacing**, and the **YieldOptimizerHook**
 
 ## AI Assistant
 
-The Archimedes AI (powered by Claude) understands natural language and converts it into structured blockchain actions:
+The Archimedes AI understands natural language and converts it into structured blockchain actions:
 
 | User says | AI does |
 |-----------|---------|
@@ -257,9 +347,10 @@ Connect your wallet in the app, click **"Get test tokens"**, and mint USDT, USDC
 | Protocol | Uniswap v4, Hookmate |
 | Network | Base Sepolia (testnet) |
 
+Archimedes is a better DeFi app because we fix the problems that get in the way — fewer txs, less gas, an AI that understands you, and idle liquidity that works across chains and off-chain until you settle.
+
 ---
 
 ## License
 
 MIT
-# Archimedes
